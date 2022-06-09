@@ -1,0 +1,10 @@
+name: Setup K8s Diff tools
+description: Installs all k8s-diff tools to the PATH
+runs:
+  using: "composite"
+  steps:
+    - run: |
+        set -e
+        cd ${{ github.action_path }}/..
+        go install ./cmd/...
+      shell: bash
