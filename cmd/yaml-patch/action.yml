@@ -28,10 +28,11 @@ runs:
             args+=(-output-dir "$outputDir")
         done
         for rulesFile in ${RULES_FILES//,/ }; do
-            args+=(-rules-dir "$rulesDir")
+            args+=(-rules "$rulesFile")
         done
 
         cd ${{ github.action_path }}
+        echo "Running yaml-patch ${args[@]}"
         go run . "${args[@]}"
       shell: bash
       env:
