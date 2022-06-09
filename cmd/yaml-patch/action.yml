@@ -1,0 +1,41 @@
+name: K8s Diff / YAML Patch
+description: Run yaml-patch to modify collections of yaml documents
+inputs:
+  input-dirs:
+    required: true
+    description: "Comma-separated list of input directories"
+  output-dirs:
+    required: true
+    description: "Comma-separated list of output directories"
+  rules-files:
+    required: true
+    description: "Comma-separated list of rules files"
+  output-template:
+    required: false
+    description: "Go template string used to generate output file names"
+    default: "{{.metadata.name}}-{{.kind}}.yaml"
+runs:
+  using: "composite"
+  steps:
+    - run: |
+        set -e
+
+        args=(--output-template $OUTPUT_TEMPLATE)
+        for inputDir in ${INPUT_DIRS//,/ }; do
+            args+=(-input-dir "$inputDir")
+        done
+        for outputDir in ${OUTPUT_DIRS//,/ }; do
+            args+=(-output-dir "$outputDir")
+        done
+        for rulesFile in ${RULES_FILES//,/ }; do
+            args+=(-rules-dir "$rulesDir")
+        done
+
+        cd ${{ github.action_path }}
+        go run . "${args[@]}"
+      shell: bash
+      env:
+        INPUT_DIRS: ${{ inputs.input-dirs }}
+        OUTPUT_DIRS: ${{ inputs.output-dirs }}
+        RULES_FILES: ${{ inputs.rules-files }}
+        OUTPUT_TEMPLATE: ${{ inputs.output-template }}
