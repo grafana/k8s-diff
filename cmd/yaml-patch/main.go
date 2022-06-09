@@ -3,8 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/grafana/k8s-diff/pkg/differ"
 	"os"
+
+	"github.com/grafana/k8s-diff/pkg/differ"
 
 	"github.com/grafana/dskit/flagext"
 	"gopkg.in/yaml.v2"
@@ -75,7 +76,7 @@ func main() {
 	for i, inputDir := range config.InputDir {
 		outputDir := config.OutputDir[i]
 
-		objects, err := differ.ReadStateFromDirectory(inputDir)
+		objects, err := differ.ReadStateFromPath(inputDir)
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)

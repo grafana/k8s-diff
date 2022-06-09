@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"github.com/grafana/k8s-diff/pkg/differ"
-	"github.com/grafana/k8s-diff/pkg/process"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/grafana/k8s-diff/pkg/differ"
+	"github.com/grafana/k8s-diff/pkg/process"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -39,7 +40,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	objects, err := differ.ReadStateFromDirectory(config.InputDir)
+	objects, err := differ.ReadStateFromPath(config.InputDir)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "failed to read state:", err)
 		os.Exit(1)

@@ -3,10 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/grafana/k8s-diff/pkg/differ"
-	"github.com/grafana/k8s-diff/pkg/process"
 	"os"
 	"reflect"
+
+	"github.com/grafana/k8s-diff/pkg/differ"
+	"github.com/grafana/k8s-diff/pkg/process"
 )
 
 type Config struct {
@@ -32,7 +33,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	objects, err := differ.ReadStateFromDirectory(config.InputDir)
+	objects, err := differ.ReadStateFromPath(config.InputDir)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "failed to read state:", err)
 		os.Exit(1)
@@ -84,7 +85,7 @@ func annotateDefaults(defaults, config interface{}) interface{} {
 
 func LoadDefaults() (*differ.YamlObject, error) {
 	configObj, err := process.RunMimirAndCaptureConfigOutput(process.ProcessConfiguration{
-		Image:          MimirImage + ":2.0.0",
+		Image:          MimirImage + ":latest",
 		Args:           []string{},
 		ConfigFileText: ``,
 	}, "default")

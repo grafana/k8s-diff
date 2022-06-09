@@ -3,9 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
+
 	"github.com/grafana/k8s-diff/pkg/differ"
 	k8s_defaulter "github.com/grafana/k8s-diff/pkg/k8s-defaulter"
-	"os"
 )
 
 type Config struct {
@@ -30,7 +31,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	objects, err := differ.ReadStateFromDirectory(config.InputDir)
+	objects, err := differ.ReadStateFromPath(config.InputDir)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)

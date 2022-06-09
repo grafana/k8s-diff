@@ -3,13 +3,16 @@ package differ
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"text/template"
+
+	"gopkg.in/yaml.v2"
 )
 
-func ReadStateFromDirectory(path string) ([]*YamlObject, error) {
+func ReadStateFromPath(path string) ([]*YamlObject, error) {
 	state := []*YamlObject{}
 	err := filepath.WalkDir(path, func(path string, d fs.DirEntry, err error) error {
 		if d.IsDir() {
@@ -25,15 +28,20 @@ func ReadStateFromDirectory(path string) ([]*YamlObject, error) {
 		if err != nil {
 			return fmt.Errorf("failed to read k8s resource from yaml: %w", err)
 		}
+		defer f.Close()
 
-		var obj = NewYamlObject(path)
-		err = DecodeYamlObject(f, obj)
-		if err != nil {
-			fmt.Printf("%s: failed to decode k8s resource from yaml: %v\n", path, err)
-			return nil
+		decoder := yaml.NewDecoder(f)
+		for {
+			var obj = NewYamlObject(path)
+			err = decoder.Decode(&obj.Object)
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				return err
+			}
+			state = append(state, obj)
 		}
-
-		state = append(state, obj)
 		return nil
 	})
 	if err != nil {
