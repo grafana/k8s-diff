@@ -6,9 +6,12 @@ import (
 	"os"
 
 	"github.com/grafana/k8s-diff/pkg/differ"
+	"github.com/grafana/k8s-diff/pkg/ui"
 
 	"github.com/grafana/dskit/flagext"
 	"gopkg.in/yaml.v2"
+
+	"github.com/pkg/errors"
 )
 
 type Config struct {
@@ -48,26 +51,27 @@ func (c *Config) LoadRuleSet() (differ.RuleSet, error) {
 }
 
 func main() {
+	ui := ui.NewUI(os.Stdout)
 	var config = &Config{}
 	config.RegisterFlags(flag.CommandLine)
 
 	flag.Parse()
 
 	if len(config.InputDir) != len(config.OutputDir) {
-		fmt.Fprintln(os.Stderr, "--input-dir and --output-dir must have the same number of elements")
+		ui.ReportError(errors.New("input-dir and output-dir must have the same number of elements"))
 		flag.Usage()
 		os.Exit(1)
 	}
 
 	if len(config.InputDir) == 0 || len(config.OutputDir) == 0 {
-		fmt.Println("input-dir and output-dir are required")
+		ui.ReportError(errors.New("input-dir and output-dir are required"))
 		flag.Usage()
 		os.Exit(1)
 	}
 
 	ruleSet, err := config.LoadRuleSet()
 	if err != nil {
-		fmt.Println(err)
+		ui.ReportError(errors.Wrap(err, "failed to load rules"))
 		os.Exit(1)
 	}
 
@@ -76,9 +80,9 @@ func main() {
 	for i, inputDir := range config.InputDir {
 		outputDir := config.OutputDir[i]
 
-		objects, err := differ.ReadStateFromPath(inputDir)
+		objects, err := differ.ReadStateFromPath(ui, inputDir)
 		if err != nil {
-			fmt.Println(err)
+			ui.ReportError(errors.Wrap(err, "failed to read state"))
 			os.Exit(1)
 		}
 
@@ -86,23 +90,21 @@ func main() {
 
 		objects, err = differ.ApplyRuleSet(objects, ruleSet, debugInfo)
 		if err != nil {
-			fmt.Println(err)
+			ui.ReportError(errors.Wrap(err, "failed to apply rules"))
 			os.Exit(1)
 		}
 
 		err = differ.WriteStateToDirectory(objects, outputDir, config.OutputTemplate)
 		if err != nil {
-			fmt.Println(err)
+			ui.ReportError(errors.Wrap(err, "failed to write state"))
 			os.Exit(1)
 		}
 	}
 
-	err = debugInfo.ValidateAllRulesWereEffective()
+	err = debugInfo.ValidateAllRulesWereEffective(ui)
 	if err != nil {
-		fmt.Println(err)
+		ui.ReportError((errors.Wrap(err, "failed to validate rules")))
 	}
 
-	if config.PrintTodo {
-		debugInfo.Print()
-	}
+	debugInfo.Print(ui)
 }

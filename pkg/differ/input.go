@@ -9,18 +9,20 @@ import (
 	"path/filepath"
 	"text/template"
 
+	"github.com/grafana/k8s-diff/pkg/ui"
 	"gopkg.in/yaml.v2"
 )
 
-func ReadStateFromPath(path string) ([]*YamlObject, error) {
+func ReadStateFromPath(output ui.UI, path string) ([]*YamlObject, error) {
 	state := []*YamlObject{}
+	skippedFiles := []string{}
 	err := filepath.WalkDir(path, func(path string, d fs.DirEntry, err error) error {
 		if d.IsDir() {
 			return nil
 		}
 
 		if filepath.Ext(path) != ".yaml" {
-			fmt.Fprintf(os.Stderr, "%s: skipping non-yaml file\n", path)
+			skippedFiles = append(skippedFiles, path)
 			return nil
 		}
 
@@ -46,6 +48,16 @@ func ReadStateFromPath(path string) ([]*YamlObject, error) {
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	if len(skippedFiles) > 0 {
+		output.SummarizeResults("Skipped files", func(u ui.UI) error {
+			u.ListItems(len(skippedFiles), func(i int, u ui.UI) error {
+				u.Print(skippedFiles[i])
+				return nil
+			})
+			return nil
+		})
 	}
 	return state, nil
 }

@@ -3,10 +3,10 @@ package differ
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"strings"
 
 	jsonpatch "github.com/evanphx/json-patch"
+	"github.com/grafana/k8s-diff/pkg/ui"
 )
 
 type DebugInfo struct {
@@ -14,14 +14,26 @@ type DebugInfo struct {
 	InitialObjects []*YamlObject
 }
 
-func (d *DebugInfo) Print() {
-
-	var patchesByName = make(map[string][]objectPatch)
-
+func (d *DebugInfo) Print(output ui.UI) {
+	var todoRules []*RuleDebugInfo
 	for _, ruleDebugInfo := range d.RuleDebugInfos {
-		if !ruleDebugInfo.Rule.Describe().Todo {
-			continue
+		if ruleDebugInfo.Rule.Describe().Todo {
+			todoRules = append(todoRules, ruleDebugInfo)
 		}
+	}
+
+	output.SummarizeResults(`
+## Future TODO Items
+These differences are known and planned to be fixed in the future.
+`, func(output ui.UI) error {
+		printRuleDebugInfo(output, todoRules)
+		return nil
+	})
+}
+
+func printRuleDebugInfo(output ui.UI, ruleDebugInfos []*RuleDebugInfo) {
+	var patchesByName = make(map[string][]objectPatch)
+	for _, ruleDebugInfo := range ruleDebugInfos {
 		for _, patches := range ruleDebugInfo.Patches {
 			patchesByName[ruleDebugInfo.Rule.Describe().Name] = append(patchesByName[ruleDebugInfo.Rule.Describe().Name], patches.patchedObjects...)
 		}
@@ -34,14 +46,16 @@ func (d *DebugInfo) Print() {
 			changesBySource[change.newObj.ResourceKey] = append(changesBySource[change.newObj.ResourceKey], change)
 		}
 
-		fmt.Println("# ", ruleName)
-		for _, v := range changesBySource {
-			printChanges(ruleName, v)
-		}
+		output.SummarizeResults(ruleName, func(output ui.UI) error {
+			for _, v := range changesBySource {
+				printChanges(output, v)
+			}
+			return nil
+		})
 	}
 }
 
-func printChanges(ruleName string, changes []objectPatch) {
+func printChanges(output ui.UI, changes []objectPatch) {
 	finalPatch := NewYamlObject("patch")
 
 	for _, oc := range changes {
@@ -57,10 +71,10 @@ func printChanges(ruleName string, changes []objectPatch) {
 		return
 	}
 
-	fmt.Println(changes[0].newObj.ResourceKey.Source)
-	fmt.Println("```yaml")
-	EncodeYamlObject(os.Stdout, finalPatch)
-	fmt.Println("```")
+	output.Print("```yaml")
+	output.Print("# " + changes[0].newObj.ResourceKey.Source)
+	EncodeYamlObject(output, finalPatch)
+	output.Print("```")
 }
 
 func NewDebugInfo(ruleSet RuleSet) *DebugInfo {
@@ -74,16 +88,19 @@ func (d *DebugInfo) AddInitialObjects(objects []*YamlObject) {
 	d.InitialObjects = append(d.InitialObjects, objects...)
 }
 
-func (d *DebugInfo) ValidateAllRulesWereEffective() error {
+func (d *DebugInfo) ValidateAllRulesWereEffective(output ui.UI) error {
 	if d == nil {
 		return nil
 	}
 	var multiError = new(MultiError)
-	for _, ruleDebugInfo := range d.RuleDebugInfos {
-		if err := ruleDebugInfo.ValidateAllStepsWereEffective(); err != nil {
-			multiError.Errors = append(multiError.Errors, err)
+	output.SummarizeResults("Rule Validation", func(output ui.UI) error {
+		for _, ruleDebugInfo := range d.RuleDebugInfos {
+			if err := ruleDebugInfo.ValidateAllStepsWereEffective(output); err != nil {
+				multiError.Errors = append(multiError.Errors, err)
+			}
 		}
-	}
+		return nil
+	})
 	if multiError.Errors != nil {
 		return multiError
 	}
@@ -171,73 +188,89 @@ func (e IneffectivePatchError) Error() string {
 	return fmt.Sprintf("rule %q patching step %d:\n\t %s did not change any objects in:\n\t\t%s", e.RuleName, e.Step, e.PatchRule, strings.Join(candidateStrings, "\n\t\t"))
 }
 
-func (d *RuleDebugInfo) ValidateAllStepsWereEffective() error {
-	previousMatchedObjects := d.Parent.InitialObjects
-	// Validate that all matches matched at least one object.
-	for step, debugInfo := range d.Matches {
-		if len(debugInfo.matchedObjects) == 0 {
-			return IneffectiveMatchError{
-				RuleName:  d.Rule.Describe().Name,
-				Step:      step,
-				Matched:   previousMatchedObjects,
-				MatchRule: d.Rule.Describe().MatchRules[step],
-			}
-		}
-		previousMatchedObjects = debugInfo.matchedObjects
-	}
+func (d *RuleDebugInfo) ValidateAllStepsWereEffective(output ui.UI) error {
+	output.SummarizeResults(d.Rule.Describe().Name, func(output ui.UI) error {
 
-	// Validate that all patches changed at least one object.
-	for step, debugInfo := range d.Patches {
-		if len(debugInfo.patchedObjects) == 0 {
-			return IneffectivePatchError{
-				RuleName:  d.Rule.Describe().Name,
-				Step:      step,
-				Matched:   previousMatchedObjects,
-				PatchRule: d.Rule.Describe().PatchRules[step],
-			}
-		}
+		previousMatchedObjects := d.Parent.InitialObjects
+		// Validate that all matches matched at least one object.
+		for step, debugInfo := range d.Matches {
+			if len(debugInfo.matchedObjects) == 0 {
 
-		// Validate that patches aren't all empty.
-		atLeastOneNonEmptyPatch := false
-		for _, op := range debugInfo.patchedObjects {
-			if !bytes.Equal(op.patch, []byte("{}")) {
-				atLeastOneNonEmptyPatch = true
+				output.SummarizeResults(fmt.Sprintf("Match rule #%d doesn't match any objects", step), func(output ui.UI) error {
+					output.Print("Rule: " + d.Rule.Describe().MatchRules[step].String())
+					output.Print("Objects:")
+					output.ListItems(len(previousMatchedObjects), func(i int, output ui.UI) error {
+						output.Print(previousMatchedObjects[i].ResourceKey.String())
+						return nil
+					})
+					return nil
+				})
+
+				return IneffectiveMatchError{
+					RuleName:  d.Rule.Describe().Name,
+					Step:      step,
+					Matched:   previousMatchedObjects,
+					MatchRule: d.Rule.Describe().MatchRules[step],
+				}
 			}
+
+			previousMatchedObjects = debugInfo.matchedObjects
 		}
 
-		if !atLeastOneNonEmptyPatch {
-			return IneffectivePatchError{
-				RuleName:  d.Rule.Describe().Name,
-				Step:      step,
-				Matched:   previousMatchedObjects,
-				PatchRule: d.Rule.Describe().PatchRules[step],
+		// Validate that all patches changed at least one object.
+		for step, debugInfo := range d.Patches {
+			if len(debugInfo.patchedObjects) == 0 {
+
+				output.SummarizeResults(fmt.Sprintf("Patch rule #%d doesn't change any objects", step), func(output ui.UI) error {
+					output.Print("Rule: " + d.Rule.Describe().PatchRules[step].String())
+					output.Print("Objects:")
+					output.ListItems(len(previousMatchedObjects), func(i int, output ui.UI) error {
+						output.Print(previousMatchedObjects[i].ResourceKey.String())
+						return nil
+					})
+					return nil
+				})
+
+				return IneffectivePatchError{
+					RuleName:  d.Rule.Describe().Name,
+					Step:      step,
+					Matched:   previousMatchedObjects,
+					PatchRule: d.Rule.Describe().PatchRules[step],
+				}
 			}
+
+			// Validate that patches aren't all empty.
+			actualPatchedObjects := []objectPatch{}
+			for _, op := range debugInfo.patchedObjects {
+				if !bytes.Equal(op.patch, []byte("{}")) {
+					actualPatchedObjects = append(actualPatchedObjects, op)
+				}
+			}
+
+			if len(actualPatchedObjects) == 0 {
+				output.SummarizeResults(fmt.Sprintf("Patch rule #%d doesn't change any objects", step), func(output ui.UI) error {
+					output.Print("Rule: " + d.Rule.Describe().PatchRules[step].String())
+					output.Print("Objects:")
+					output.ListItems(len(previousMatchedObjects), func(i int, output ui.UI) error {
+						output.Print(previousMatchedObjects[i].ResourceKey.String())
+						return nil
+					})
+					return nil
+				})
+
+				return IneffectivePatchError{
+					RuleName:  d.Rule.Describe().Name,
+					Step:      step,
+					Matched:   previousMatchedObjects,
+					PatchRule: d.Rule.Describe().PatchRules[step],
+				}
+			}
+
 		}
-	}
+		return nil
+	})
 
 	return nil
-}
-
-func (d *RuleDebugInfo) Print() {
-	if d == nil {
-		return
-	}
-	fmt.Printf("Rule: %s\n", d.Rule.Describe().Name)
-	for step, debugInfo := range d.Matches {
-		fmt.Printf("Step %d: %v\n", step, d.Rule)
-		fmt.Printf("  Matched:\n")
-		for _, u := range debugInfo.matchedObjects {
-			fmt.Printf("    %s\n", ResourceKeyForObject(u))
-		}
-	}
-
-	for step, debugInfo := range d.Patches {
-		fmt.Printf("Step %d: %v\n", step, d.Rule)
-		fmt.Printf("  Patched:\n")
-		for _, op := range debugInfo.patchedObjects {
-			fmt.Printf("    %s -> %s\n", ResourceKeyForObject(op.oldObj), ResourceKeyForObject(op.newObj))
-		}
-	}
 }
 
 func (d *RuleDebugInfo) RecordIncrementalMatch(step int, obj *YamlObject) {

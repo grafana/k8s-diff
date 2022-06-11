@@ -8,6 +8,8 @@ import (
 
 	"github.com/grafana/k8s-diff/pkg/differ"
 	"github.com/grafana/k8s-diff/pkg/process"
+	"github.com/grafana/k8s-diff/pkg/ui"
+	"github.com/pkg/errors"
 )
 
 type Config struct {
@@ -23,25 +25,26 @@ func (c *Config) RegisterFlags(f *flag.FlagSet) {
 }
 
 func main() {
+	ui := ui.NewUI(os.Stdout)
 	config := &Config{}
 	config.RegisterFlags(flag.CommandLine)
 	flag.Parse()
 
 	if config.InputDir == "" || config.OutputDir == "" {
-		fmt.Fprintln(os.Stderr, "--input-dir and --output-dir are required")
+		ui.ReportError(errors.New("input-dir and output-dir are required"))
 		flag.Usage()
 		os.Exit(1)
 	}
 
-	objects, err := differ.ReadStateFromPath(config.InputDir)
+	objects, err := differ.ReadStateFromPath(ui, config.InputDir)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "failed to read state:", err)
+		ui.ReportError(errors.Wrap(err, "failed to read state "))
 		os.Exit(1)
 	}
 
 	defaults, err := LoadDefaults()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "failed to load defaults:", err)
+		ui.ReportError(errors.Wrap(err, "failed to load defaults"))
 		os.Exit(1)
 	}
 
@@ -53,7 +56,7 @@ func main() {
 
 	err = differ.WriteStateToDirectory(objects, config.OutputDir, "")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "failed to write configs:", err)
+		ui.ReportError(errors.New("failed to write state: " + err.Error()))
 		os.Exit(1)
 	}
 }
