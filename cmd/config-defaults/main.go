@@ -10,11 +10,13 @@ import (
 	"github.com/grafana/k8s-diff/pkg/process"
 	"github.com/grafana/k8s-diff/pkg/ui"
 	"github.com/pkg/errors"
+	"gopkg.in/yaml.v2"
 )
 
 type Config struct {
 	InputDir  string
 	OutputDir string
+	ImageTag  string
 }
 
 const MimirImage = "grafana/mimir"
@@ -22,6 +24,7 @@ const MimirImage = "grafana/mimir"
 func (c *Config) RegisterFlags(f *flag.FlagSet) {
 	f.StringVar(&c.InputDir, "input-dir", "", "Input directory")
 	f.StringVar(&c.OutputDir, "output-dir", "", "Output directory")
+	f.StringVar(&c.ImageTag, "image-tag", "latest", "Image tag, e.g. latest or r190-abcde")
 }
 
 func main() {
@@ -42,7 +45,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	defaults, err := LoadDefaults()
+	defaults, err := LoadDefaults(config.ImageTag)
 	if err != nil {
 		ui.ReportError(errors.Wrap(err, "failed to load defaults"))
 		os.Exit(1)
@@ -62,6 +65,12 @@ func main() {
 }
 
 func annotateDefaults(defaults, config interface{}) interface{} {
+	if defaults == nil {
+		fmt.Println("defaults is nil")
+		yaml.NewEncoder(os.Stdout).Encode(defaults)
+		fmt.Println("config is:")
+		yaml.NewEncoder(os.Stdout).Encode(config)
+	}
 	switch config := config.(type) {
 	case map[string]interface{}:
 		for k, v := range config {
@@ -86,9 +95,9 @@ func annotateDefaults(defaults, config interface{}) interface{} {
 	return config
 }
 
-func LoadDefaults() (*differ.YamlObject, error) {
+func LoadDefaults(imageTag string) (*differ.YamlObject, error) {
 	configObj, err := process.RunMimirAndCaptureConfigOutput(process.ProcessConfiguration{
-		Image:          MimirImage + ":latest",
+		Image:          MimirImage + ":" + imageTag,
 		Args:           []string{},
 		ConfigFileText: ``,
 	}, "default")

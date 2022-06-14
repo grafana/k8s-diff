@@ -23,6 +23,7 @@ import (
 type Config struct {
 	InputDir  string
 	OutputDir string
+	ImageTag  string
 }
 
 const MimirImage = "grafana/mimir"
@@ -30,6 +31,7 @@ const MimirImage = "grafana/mimir"
 func (c *Config) RegisterFlags(f *flag.FlagSet) {
 	f.StringVar(&c.InputDir, "input-dir", "", "Input directory")
 	f.StringVar(&c.OutputDir, "output-dir", "", "Output directory")
+	f.StringVar(&c.ImageTag, "image-tag", "latest", "Image tag, e.g. 'latest' or 'r190-abcde'")
 }
 
 func main() {
@@ -50,7 +52,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	extractor := NewConfigExtractor()
+	extractor := NewConfigExtractor(config.ImageTag)
 	_, err = differ.MapObjects(objects, extractor, nil)
 	if err != nil {
 		ui.ReportError(errors.Wrap(err, "failed to map objects"))
@@ -74,11 +76,13 @@ type ConfigExtractor struct {
 	pods       map[differ.ResourceKey]corev1.PodSpec
 	configMaps []corev1.ConfigMap
 	secrets    []corev1.Secret
+	imageTag   string
 }
 
-func NewConfigExtractor() *ConfigExtractor {
+func NewConfigExtractor(imageTag string) *ConfigExtractor {
 	return &ConfigExtractor{
-		pods: make(map[differ.ResourceKey]corev1.PodSpec),
+		pods:     make(map[differ.ResourceKey]corev1.PodSpec),
+		imageTag: imageTag,
 	}
 }
 
@@ -117,7 +121,7 @@ func (c *ConfigExtractor) ResolveConfigs() ([]*differ.YamlObject, error) {
 			}
 			var processConfig process.ProcessConfiguration
 			mountPath, restArgs := findConfigPath(container.Args)
-			processConfig.Image = container.Image
+			processConfig.Image = strings.Split(container.Image, ":")[0] + ":" + c.imageTag
 			processConfig.Args = restArgs
 
 			if mountPath != "" {
