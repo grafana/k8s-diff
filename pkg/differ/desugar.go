@@ -8,12 +8,14 @@ import (
 
 func Desugar(rule Json6902PatchRule) []Json6902PatchRule {
 	if rule.RenameObject != nil {
-		rule.Match = append(rule.Match, Json6902Operation{
-			Op:    "test",
-			Path:  "/metadata/name",
-			Value: rule.RenameObject.From,
+		rule.Match = append(rule.Match, Json6902MatchOperation{
+			Json6902PatchOperation: Json6902PatchOperation{
+				Op:    "test",
+				Path:  "/metadata/name",
+				Value: rule.RenameObject.From,
+			},
 		})
-		rule.Steps = append(rule.Steps, Json6902Operation{
+		rule.Steps = append(rule.Steps, Json6902PatchOperation{
 			Op:    "replace",
 			Path:  "/metadata/name",
 			Value: rule.RenameObject.To,
@@ -25,11 +27,13 @@ func Desugar(rule Json6902PatchRule) []Json6902PatchRule {
 	}
 
 	if rule.RemoveField != "" {
-		rule.Match = append(rule.Match, Json6902Operation{
-			Op:   "remove",
-			Path: rule.RemoveField,
+		rule.Match = append(rule.Match, Json6902MatchOperation{
+			Json6902PatchOperation: Json6902PatchOperation{
+				Op:   "remove",
+				Path: rule.RemoveField,
+			},
 		})
-		rule.Steps = append(rule.Steps, Json6902Operation{
+		rule.Steps = append(rule.Steps, Json6902PatchOperation{
 			Op:   "remove",
 			Path: rule.RemoveField,
 		})
@@ -40,11 +44,13 @@ func Desugar(rule Json6902PatchRule) []Json6902PatchRule {
 	}
 
 	if rule.RenameField != nil {
-		rule.Match = append(rule.Match, Json6902Operation{
-			Op:   "remove",
-			Path: rule.RenameField.From,
+		rule.Match = append(rule.Match, Json6902MatchOperation{
+			Json6902PatchOperation: Json6902PatchOperation{
+				Op:   "remove",
+				Path: rule.RenameField.From,
+			},
 		})
-		rule.Steps = append(rule.Steps, Json6902Operation{
+		rule.Steps = append(rule.Steps, Json6902PatchOperation{
 			Op:   "move",
 			Path: rule.RenameField.To,
 			From: rule.RenameField.From,
@@ -57,13 +63,49 @@ func Desugar(rule Json6902PatchRule) []Json6902PatchRule {
 
 	finalRules := []Json6902PatchRule{rule}
 
-	for path, values := range rule.Matchers {
-		finalRules = addMatchRulesToAll(finalRules, path, values)
+	for _, match := range rule.Match {
+		for path, values := range match.Matchers {
+			finalRules = applyMutationToAll(finalRules, values, func(subject Json6902PatchRule, value interface{}) Json6902PatchRule {
+
+				for i, step := range subject.Match {
+					if step.Matchers[path] != nil {
+						// remove step from match
+						subject.Match = append(subject.Match[:i], subject.Match[i+1:]...)
+						continue
+					}
+				}
+
+				subject.Match = append(subject.Match, Json6902MatchOperation{
+					Json6902PatchOperation: Json6902PatchOperation{
+						Op:    "test",
+						Path:  path,
+						Value: value,
+					},
+				})
+
+				return subject
+			})
+		}
 	}
 
-	rule.Matchers = nil
-
 	return finalRules
+}
+
+func applyMutationToAll(rules []Json6902PatchRule, values []interface{}, mutation func(Json6902PatchRule, interface{}) Json6902PatchRule) []Json6902PatchRule {
+	output := []Json6902PatchRule{}
+
+	for _, rule := range rules {
+		for _, value := range values {
+			copy, err := copystructure.Copy(rule)
+			if err != nil {
+				panic(err)
+			}
+			newRule := copy.(Json6902PatchRule)
+			output = append(output, mutation(newRule, value))
+		}
+	}
+
+	return output
 }
 
 func addMatchRulesToAll(rules []Json6902PatchRule, path string, values []interface{}) []Json6902PatchRule {
@@ -84,10 +126,12 @@ func addMatchRules(rule Json6902PatchRule, path string, values []interface{}) []
 			panic(err)
 		}
 		newRule := copy.(Json6902PatchRule)
-		newRule.Match = append(newRule.Match, Json6902Operation{
-			Op:    "test",
-			Path:  path,
-			Value: value,
+		newRule.Match = append(newRule.Match, Json6902MatchOperation{
+			Json6902PatchOperation: Json6902PatchOperation{
+				Op:    "test",
+				Path:  path,
+				Value: value,
+			},
 		})
 		output = append(output, newRule)
 	}

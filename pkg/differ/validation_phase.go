@@ -160,7 +160,7 @@ type IneffectiveMatchError struct {
 	RuleName  string
 	Step      int
 	Matched   []*YamlObject
-	MatchRule Json6902Operation
+	MatchRule Json6902MatchOperation
 }
 
 func (e IneffectiveMatchError) Error() string {
@@ -176,7 +176,7 @@ type IneffectivePatchError struct {
 	RuleName  string
 	Step      int
 	Matched   []*YamlObject
-	PatchRule Json6902Operation
+	PatchRule Json6902PatchOperation
 }
 
 func (e IneffectivePatchError) Error() string {
@@ -189,7 +189,7 @@ func (e IneffectivePatchError) Error() string {
 }
 
 func (d *RuleDebugInfo) ValidateAllStepsWereEffective(output ui.UI) error {
-	output.SummarizeResults(d.Rule.Describe().Name, func(output ui.UI) error {
+	return output.SummarizeResults(d.Rule.Describe().Name, func(output ui.UI) error {
 
 		previousMatchedObjects := d.Parent.InitialObjects
 		// Validate that all matches matched at least one object.
@@ -269,8 +269,6 @@ func (d *RuleDebugInfo) ValidateAllStepsWereEffective(output ui.UI) error {
 		}
 		return nil
 	})
-
-	return nil
 }
 
 func (d *RuleDebugInfo) RecordIncrementalMatch(step int, obj *YamlObject) {

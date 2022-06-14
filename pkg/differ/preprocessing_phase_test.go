@@ -66,7 +66,7 @@ func TestSimplePatch(t *testing.T) {
 		}
 		rule := Json6902PatchRule{
 			Steps: Json6902Patch{
-				Json6902Operation{
+				Json6902PatchOperation{
 					Op:   "remove",
 					Path: "/kind",
 				},
@@ -90,7 +90,7 @@ func TestSimplePatch(t *testing.T) {
 		})
 
 		patch := Json6902Patch{
-			Json6902Operation{
+			Json6902PatchOperation{
 				Op:    "replace",
 				Path:  "/metadata/name",
 				Value: "querier",
@@ -110,7 +110,7 @@ func TestSimplePatch(t *testing.T) {
 		})
 
 		patch := Json6902Patch{
-			Json6902Operation{
+			Json6902PatchOperation{
 				Op:   "remove",
 				Path: "/metadata/labels/name",
 			},
@@ -126,11 +126,13 @@ func TestSimpleMatch(t *testing.T) {
 			"name": "querier",
 		})
 
-		patch := Json6902Patch{
-			Json6902Operation{
-				Op:    "test",
-				Path:  "/metadata/labels/name",
-				Value: "querier",
+		patch := Json6902Match{
+			{
+				Json6902PatchOperation: Json6902PatchOperation{
+					Op:    "test",
+					Path:  "/metadata/labels/name",
+					Value: "querier",
+				},
 			},
 		}
 		match, err := patch.Matches(object, nil)
@@ -143,11 +145,13 @@ func TestSimpleMatch(t *testing.T) {
 			"name": "querier",
 		})
 
-		patch := Json6902Patch{
-			Json6902Operation{
-				Op:    "test",
-				Path:  "/metadata/labels/name",
-				Value: "querier2",
+		patch := Json6902Match{
+			{
+				Json6902PatchOperation: Json6902PatchOperation{
+					Op:    "test",
+					Path:  "/metadata/labels/name",
+					Value: "querier2",
+				},
 			},
 		}
 		match, err := patch.Matches(object, nil)

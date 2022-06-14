@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	jsonpatch "github.com/evanphx/json-patch"
+	"gopkg.in/yaml.v2"
 )
 
 type ObjectRule interface {
@@ -16,7 +17,7 @@ type ObjectRule interface {
 type ObjectRuleDescription struct {
 	Name       string
 	Todo       bool
-	MatchRules Json6902Patch
+	MatchRules Json6902Match
 	PatchRules Json6902Patch
 }
 
@@ -40,17 +41,16 @@ func (r *RuleSet) Desugar() {
 
 type Json6902PatchRule struct {
 	Name  string        `yaml:"name,omitempty"`
-	Match Json6902Patch `yaml:"match,omitempty"`
+	Match Json6902Match `yaml:"match,omitempty"`
 	Steps Json6902Patch `yaml:"steps,omitempty"`
 
 	Todo bool `yaml:"todo,omitempty"`
 
 	// These fields exist to support syntax sugar.
 	// They are converted to the above fields when the rule is created.
-	RemoveField  string                   `yaml:"remove_field,omitempty"`
-	RenameField  *RenameRule              `yaml:"rename_field,omitempty"`
-	RenameObject *RenameRule              `yaml:"rename_object,omitempty"`
-	Matchers     map[string][]interface{} `yaml:",inline"`
+	RemoveField  string      `yaml:"remove_field,omitempty"`
+	RenameField  *RenameRule `yaml:"rename_field,omitempty"`
+	RenameObject *RenameRule `yaml:"rename_object,omitempty"`
 }
 
 type RenameRule struct {
@@ -87,9 +87,22 @@ func (j Json6902PatchRule) MapObject(obj *YamlObject, debug *RuleDebugInfo) (*Ya
 	return obj, nil
 }
 
-type Json6902Patch []Json6902Operation
+type Json6902Patch []Json6902PatchOperation
 
-func (j Json6902Patch) Matches(obj *YamlObject, debug *RuleDebugInfo) (bool, error) {
+type Json6902Match []Json6902MatchOperation
+
+func (j Json6902Match) String() string {
+	buf := bytes.NewBuffer(nil)
+	err := yaml.NewEncoder(buf).Encode(j)
+
+	if err != nil {
+		return err.Error()
+	}
+
+	return buf.String()
+}
+
+func (j Json6902Match) Matches(obj *YamlObject, debug *RuleDebugInfo) (bool, error) {
 	obj = obj.DeepCopy()
 	for i, step := range j {
 		matches, err := step.Matches(obj)
@@ -116,14 +129,19 @@ func (j Json6902Patch) ApplyToObject(obj *YamlObject, debug *RuleDebugInfo) erro
 	return nil
 }
 
-type Json6902Operation struct {
+type Json6902MatchOperation struct {
+	Json6902PatchOperation `yaml:",inline"`
+	Matchers               map[string][]interface{} `yaml:",inline"`
+}
+
+type Json6902PatchOperation struct {
 	Op    string      `yaml:"op" json:"op"`                 // Required for all
 	Path  string      `yaml:"path" json:"path"`             // Required for all
 	From  string      `yaml:"from" json:"from,omitempty"`   // Required for copy / move
 	Value interface{} `yaml:"value" json:"value,omitempty"` // Required for add / replace / test
 }
 
-func (j Json6902Operation) String() string {
+func (j Json6902PatchOperation) String() string {
 	switch j.Op {
 	case "add":
 		return "add " + j.Path + ": " + fmt.Sprint(j.Value)
@@ -142,7 +160,7 @@ func (j Json6902Operation) String() string {
 	}
 }
 
-func (j Json6902Operation) Matches(obj *YamlObject) (bool, error) {
+func (j Json6902PatchOperation) Matches(obj *YamlObject) (bool, error) {
 	buf := new(bytes.Buffer)
 	err := EncodeYamlObjectAsJson(buf, obj)
 	if err != nil {
@@ -153,7 +171,7 @@ func (j Json6902Operation) Matches(obj *YamlObject) (bool, error) {
 	return err == nil, nil
 }
 
-func (j Json6902Operation) ApplyToObject(obj *YamlObject) error {
+func (j Json6902PatchOperation) ApplyToObject(obj *YamlObject) error {
 	buf := new(bytes.Buffer)
 	err := EncodeYamlObjectAsJson(buf, obj)
 	if err != nil {
@@ -172,7 +190,7 @@ func (j Json6902Operation) ApplyToObject(obj *YamlObject) error {
 	return err
 }
 
-func (j Json6902Operation) Apply(buf []byte) ([]byte, error) {
+func (j Json6902PatchOperation) Apply(buf []byte) ([]byte, error) {
 	patchJson, err := json.Marshal(Json6902Patch{j})
 	if err != nil {
 		return nil, err
@@ -188,7 +206,7 @@ func (j Json6902Operation) Apply(buf []byte) ([]byte, error) {
 }
 
 type IgnoreRule struct {
-	Match Json6902Patch `yaml:"match"`
+	Match Json6902Match `yaml:"match"`
 	Name  string        `yaml:"name"`
 
 	Todo bool `yaml:"todo"`

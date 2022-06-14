@@ -76,16 +76,18 @@ func TestDesugaring(t *testing.T) {
 	t.Run("complex desugaring appends to match and patch steps", func(t *testing.T) {
 		rule := Json6902PatchRule{
 			Name: "Mixed desugaring operations",
-			Match: Json6902Patch{
-				{Op: "test", Path: "/metadata/labels/part-of", Value: "memberlist"},
+			Match: Json6902Match{
+				{Json6902PatchOperation: Json6902PatchOperation{Op: "test", Path: "/metadata/labels/part-of", Value: "memberlist"}},
+				{
+					Matchers: map[string][]interface{}{
+						"/kind": {"Deployment"},
+					},
+				},
 			},
 			Steps: Json6902Patch{
 				{Op: "remove", Path: "/spec/strategy"},
 			},
 
-			Matchers: map[string][]interface{}{
-				"/kind": {"Deployment"},
-			},
 			RenameObject: &RenameRule{
 				From: "mimir-querier",
 				To:   "querier",
@@ -114,8 +116,12 @@ func TestDesugaring(t *testing.T) {
 		rule := Json6902PatchRule{
 			Name:        "Remove a field from a specific kind",
 			RemoveField: "/spec/replicas",
-			Matchers: map[string][]interface{}{
-				"/kind": {"Deployment"},
+			Match: []Json6902MatchOperation{
+				{
+					Matchers: map[string][]interface{}{
+						"/kind": {"Deployment"},
+					},
+				},
 			},
 		}
 		rules := Desugar(rule)
@@ -135,8 +141,12 @@ func TestDesugaring(t *testing.T) {
 		rule := Json6902PatchRule{
 			Name:        "Remove a field from two specific kinds",
 			RemoveField: "/spec/replicas",
-			Matchers: map[string][]interface{}{
-				"/kind": {"Deployment", "StatefulSet"},
+			Match: []Json6902MatchOperation{
+				{
+					Matchers: map[string][]interface{}{
+						"/kind": {"Deployment", "StatefulSet"},
+					},
+				},
 			},
 		}
 		rules := Desugar(rule)

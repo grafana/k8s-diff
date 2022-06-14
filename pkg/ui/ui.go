@@ -13,7 +13,7 @@ import (
 
 type UI interface {
 	ReportError(error)
-	SummarizeResults(string, func(UI) error)
+	SummarizeResults(string, func(UI) error) error
 	ListItems(length int, itemsFunc func(int, UI) error)
 	Print(msg string)
 	io.Writer
@@ -35,7 +35,7 @@ func (u *TermUI) ReportError(err error) {
 	fmt.Fprintln(u.output, err.Error())
 }
 
-func (u *TermUI) SummarizeResults(header string, bodyFunc func(UI) error) {
+func (u *TermUI) SummarizeResults(header string, bodyFunc func(UI) error) error {
 	bodyBuffer := &bytes.Buffer{}
 	subUI := NewUI(bodyBuffer)
 
@@ -45,11 +45,12 @@ func (u *TermUI) SummarizeResults(header string, bodyFunc func(UI) error) {
 	}
 
 	if bodyBuffer.Len() == 0 {
-		return
+		return err
 	}
 
 	fmt.Fprintln(u.output, header)
 	fmt.Fprintln(u.output, bodyBuffer.String())
+	return err
 }
 
 func (u *TermUI) ListItems(length int, itemsFunc func(int, UI) error) {
@@ -92,7 +93,7 @@ var summaryTemplate = template.Must(template.New("root").Parse(`
 </details>
 `))
 
-func (u *GithubActionsUI) SummarizeResults(header string, bodyFunc func(UI) error) {
+func (u *GithubActionsUI) SummarizeResults(header string, bodyFunc func(UI) error) error {
 	bodyBuffer := &bytes.Buffer{}
 	subUI := NewUI(bodyBuffer)
 
@@ -102,7 +103,7 @@ func (u *GithubActionsUI) SummarizeResults(header string, bodyFunc func(UI) erro
 	}
 
 	if bodyBuffer.Len() == 0 {
-		return
+		return err
 	}
 
 	err = summaryTemplate.Execute(u.output, struct {
@@ -115,6 +116,7 @@ func (u *GithubActionsUI) SummarizeResults(header string, bodyFunc func(UI) erro
 	if err != nil {
 		u.ReportError(errors.Wrap(err, "failed to render results"))
 	}
+	return err
 }
 
 func (u *GithubActionsUI) ListItems(length int, itemsFunc func(int, UI) error) {
